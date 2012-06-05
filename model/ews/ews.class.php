@@ -146,14 +146,11 @@ class Ews {
 		//https://mail.bundesliga.at/owa/?ae=PreFormAction&a=Open&t=IPM.Appointment&id=RgAAAADztGej1vchS5deumnC6FTQBwAWMjwbjh5WS7zXYTuZYYeKAAAA%2fVueAAAWMjwbjh5WS7zXYTuZYYeKAAABSR24AAAP&clr=-1&pspid=_1338835523518_828275302
 		
 		// Get an item by its uid for editing...
-		//if(isset($get) && !empty($get['uid']))
-		//	$item = $this->getItem($get['uid']);
+		if(isset($get) && !empty($get['uid']))
+			$item = $this->getItem($get['uid']);
 		
-		//if($item && !isset($post['edit']))
-		//	return $this->getForm($tpl, null, $item);
-		
-		//if($post['edit'] && $post['uid'] && $post['change_key'])
-		//	$this->editItem($post['uid'], $post['change_key']);
+		if($item && !isset($post['edit']))
+			return $this->getForm($tpl, null, $item);
 		
         if(!$post)
 			return $this->getForm($tpl);
@@ -161,28 +158,20 @@ class Ews {
 		if(!is_string($post['subject']) || empty($post['subject']))
 			$this->setError('nosubject');
 		
-		if(empty($post['start']['date']) || empty($post['end']['date']))
-			$this->setError('nodate');
+		// Check received dates
+		$post['start'] = $this->checkDate($post['start']);
+		$post['end'] = $this->checkDate($post['end']);
 		
-		// Not validated dates yet
-		$start = strtotime($post['start']['date'] . ' ' . $post['start']['hour'] . ':' . $post['start']['minute']);
-		$end = strtotime($post['end']['date'] . ' ' . $post['end']['hour'] . ':' . $post['end']['minute']);
-		
-		// Validate dates
-		if(!checkdate(date('n', $start) , date('j', $start) , date('Y', $start)))
-			$this->setError('nodate');
-		if(!checkdate(date('n', $end) , date('j', $end) , date('Y', $end)))
-			$this->setError('nodate');
+		if($post['start'] === false || $post['end'] === false)
+			$this->setError('nodata');
 		
 		if(is_array($this->message))
 			return $this->getForm($tpl, $this->message);
-			
-		// Successful validation
-		$start = date('Y-m-d\TH:i:00', $start);
-		$end = date('Y-m-d\TH:i:00', $end);
-        
-		if(isset($post['allday']))
-			$allday = true;
+		
+		// Check for edit/update process
+		if($post['edit'] && $post['uid'] && $post['change_key'])
+			if($this->editItem($post))
+				return $this->getForm($tpl, $this->message);
         
 		// Start the creation process
 		$request = new EWSType_CreateItemType();
@@ -191,11 +180,11 @@ class Ews {
 		
 		// Set the item properties
 		$request->Items->CalendarItem->Subject = $post['subject'];
-		$request->Items->CalendarItem->Start = $start;
-		$request->Items->CalendarItem->End = $end;
+		$request->Items->CalendarItem->Start = $post['start'];
+		$request->Items->CalendarItem->End = $post['end'];
 		$request->Items->CalendarItem->Importance = $post['importance'];
         $request->Items->CalendarItem->Location = $post['location'];
-		$request->Items->CalendarItem->IsAllDayEvent = $allday;
+		$request->Items->CalendarItem->IsAllDayEvent = isset($post['allday']) ? true : false;
 		//$request->Items->CalendarItem->RequiredAttendees->Attendee->Mailbox->EmailAddress = 'anti@herooutoftime.com';
 		
 		$request->Items->CalendarItem->Body = new EWSType_BodyType();
@@ -230,6 +219,22 @@ class Ews {
 		return $this->getForm($tpl, $this->message);
 	}
 	
+	public function checkDate($date) {
+		if(empty($date['date']))
+			return false;
+		
+		// Not validated dates yet
+		$val = strtotime($date['date'] . ' ' . $date['hour'] . ':' . $date['minute']);
+		
+		// Validate dates
+		if(!checkdate(date('n', $val) , date('j', $val) , date('Y', $val)))
+			return false;
+			
+		// Successful validation
+		$val = date('Y-m-d\TH:i:00', $val);
+		return $val;
+	}
+	
 	/**
 	 * editItem
 	 * Edit a single calendar item
@@ -237,38 +242,46 @@ class Ews {
 	 * @param string $uid A unique identifier of an event
 	 * @param string $change_key A unique key to change an event
 	 */
-	public function editItem($uid, $change_key) {
+	public function editItem($post) {
 		$request = new EWSType_UpdateItemType();
-		$request->SendMeetingInvitationsOrCancellations = 'SendToNone';
+
+		$request->SendMeetingInvitationsOrCancellations = EWSType_CalendarItemUpdateOperationType::SEND_TO_NONE;
 		$request->MessageDisposition = 'SaveOnly';
 		$request->ConflictResolution = 'AlwaysOverwrite';
+		$request->ItemChanges = new EWSType_NonEmptyArrayOfItemChangesType();
 		
-		$request->ItemChanges = array();
-
-		// Build out item change request.
-		$change = new EWSType_ItemChangeType();
-		$change->ItemId = new EWSType_ItemIdType();
-		$change->ItemId->Id = $uid;
-		$change->ItemId->ChangeKey = $change_key;
+		$request->ItemChanges->ItemChange->ItemId->Id = $post['uid'];
+		$request->ItemChanges->ItemChange->ItemId->ChangeKey = $post['change_key'];
+		$request->ItemChanges->ItemChange->Updates = new EWSType_NonEmptyArrayOfItemChangeDescriptionsType();
 		
-		$change->Updates = new EWSType_NonEmptyArrayOfItemChangeDescriptionsType();
-		$change->Updates->SetItemField = array(); // Array of fields to be update
-		$change->Updates->DeleteItemField = array(); // Array of fields to be removed
+		$request->ItemChanges->ItemChange->Updates->SetItemField = array();
 		
-		// Update Firstname (simple property)
-		$field = new EWSType_SetItemFieldType();
-		$field->FieldURI->FieldURI = 'calendars:IsCancelled';
-		$field->Calendar = new EWSType_CalendarItemType();
-		$field->Calendar->IsCancelled = true;
+		$request->ItemChanges->ItemChange->Updates->SetItemField[0]->FieldURI->FieldURI = 'item:Subject';
+		$request->ItemChanges->ItemChange->Updates->SetItemField[0]->CalendarItem = new EWSType_CalendarItemType();
+		$request->ItemChanges->ItemChange->Updates->SetItemField[0]->CalendarItem->Subject = $post['subject'];
 		
-		$change->Updates->SetItemField[] = $field;
-		// Set all changes
-		$request->ItemChanges[] = $change;
+		$request->ItemChanges->ItemChange->Updates->SetItemField[1]->FieldURI->FieldURI = 'calendar:Start';
+		$request->ItemChanges->ItemChange->Updates->SetItemField[1]->CalendarItem = new EWSType_CalendarItemType();
+		$request->ItemChanges->ItemChange->Updates->SetItemField[1]->CalendarItem->Start = date('c', $post['start']);
 		
-		// Send request
+		$request->ItemChanges->ItemChange->Updates->SetItemField[2]->FieldURI->FieldURI = 'calendar:End';
+		$request->ItemChanges->ItemChange->Updates->SetItemField[2]->CalendarItem = new EWSType_CalendarItemType();
+		$request->ItemChanges->ItemChange->Updates->SetItemField[2]->CalendarItem->End = date('c', $post['end']);
+		
+		$request->ItemChanges->ItemChange->Updates->SetItemField[3]->FieldURI->FieldURI = 'calendar:Location';
+		$request->ItemChanges->ItemChange->Updates->SetItemField[3]->CalendarItem = new EWSType_CalendarItemType();
+		$request->ItemChanges->ItemChange->Updates->SetItemField[3]->CalendarItem->Location = $post['location'];
+		
 		$response = $this->ews->UpdateItem($request);
-		echo '<pre>'.print_r($response, true).'</pre>';
 		
+		$responseCode = $response->ResponseMessages->UpdateItemResponseMessage->ResponseCode;
+		$id = $response->ResponseMessages->UpdateItemResponseMessage->Items->CalendarItem->ItemId->Id;
+		$changeKey = $response->ResponseMessages->UpdateItemResponseMessage->Items->CalendarItem->ItemId->ChangeKey;
+		
+		if($responseCode != 'NoError') {
+			$this->setError('success');
+			return true;
+		}
 	}
 	
 	public function getItem($uid) {
@@ -312,6 +325,7 @@ class Ews {
 		$current_hour = date('G', $now);
 		$current_minute = date('i', $now);
 		
+		// For editing add the time values
 		//$start_hour = date('G', $now);
 		//$start_minute = date('i', $now);
 		//$end_hour = date('G', $now);
@@ -361,8 +375,8 @@ class Ews {
 				$type = true;
 			$message .= $error['text'] . '<br/>';
 		}
-		return $this->modx->getChunk($tpl, array('hours' => $hours, 'minutes' => $minutes, 'errors' => $message, 'type' => $type));
-		//return $this->modx->getChunk($tpl, array_merge($data, array('hours' => $hours, 'minutes' => $minutes, 'errors' => $message, 'type' => $type)));
+		//return $this->modx->getChunk($tpl, array('hours' => $hours, 'minutes' => $minutes, 'errors' => $message, 'type' => $type));
+		return $this->modx->getChunk($tpl, array_merge($data, array('hours' => $hours, 'minutes' => $minutes, 'errors' => $message, 'type' => $type)));
     }
 	
 	/**

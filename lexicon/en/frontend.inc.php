@@ -26,3 +26,4 @@ $_lang['ews.importance'] = 'Importance';
 $_lang['ews.importance.low'] = 'Low';
 $_lang['ews.importance.high'] = 'High';
 $_lang['ews.cancel'] = 'Cancel';
+$_lang['ews.cancelevent'] = 'Cancel Event';
