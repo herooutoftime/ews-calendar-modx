@@ -1,0 +1,1 @@
+<option value="[[+item]]" [[+selected]]>[[+item]]</option>
