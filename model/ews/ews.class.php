@@ -37,10 +37,12 @@ class Ews {
     	$this->modx =& $modx;
         
         $corePath = $modx->getOption('ews.core_path',null,$modx->getOption('core_path').'components/ews/');
+		$assetsPath = $modx->getOption('ews.assets_path',null,$modx->getOption('assets_path').'components/ews/');
         $assetsUrl = $modx->getOption('ews.assets_url',null,$modx->getOption('assets_url').'components/ews/');
 
         $this->config = array_merge(array(
             'corePath'      => $corePath,
+			'assetsPath'	=> $assetsPath,
             'chunksPath'    => $corePath.'elements/chunks/',
             'snippetsPath'  => $corePath.'elements/snippets/',
             'includesPath'  => $corePath.'includes/'
@@ -50,6 +52,8 @@ class Ews {
 		$this->modx->lexicon->load('ews:error');
 		$this->modx->lexicon->load('ews:frontend');
         
+		$this->modx->regClientStartupHTMLBlock('<link rel="stylesheet" type="text/css" href="'.$assetsUrl.'/css/web.css"');
+		
         $s = $modx->getOption('ews.server');
         $u = $modx->getOption('ews.user');
         $p = $modx->getOption('ews.password');
@@ -104,7 +108,7 @@ class Ews {
 		$response = $this->ews->FindItem($request);
         
         $items = $response->ResponseMessages->FindItemResponseMessage->RootFolder->Items->CalendarItem;
-        var_dump($response);
+        //var_dump($response);
 		if($response)
 			return $response;
 		return false;
@@ -243,6 +247,7 @@ class Ews {
 	 * @param string $change_key A unique key to change an event
 	 */
 	public function editItem($post) {
+		
 		$request = new EWSType_UpdateItemType();
 
 		$request->SendMeetingInvitationsOrCancellations = EWSType_CalendarItemUpdateOperationType::SEND_TO_NONE;
@@ -262,15 +267,19 @@ class Ews {
 		
 		$request->ItemChanges->ItemChange->Updates->SetItemField[1]->FieldURI->FieldURI = 'calendar:Start';
 		$request->ItemChanges->ItemChange->Updates->SetItemField[1]->CalendarItem = new EWSType_CalendarItemType();
-		$request->ItemChanges->ItemChange->Updates->SetItemField[1]->CalendarItem->Start = date('c', $post['start']);
+		$request->ItemChanges->ItemChange->Updates->SetItemField[1]->CalendarItem->Start = $post['start'];
 		
 		$request->ItemChanges->ItemChange->Updates->SetItemField[2]->FieldURI->FieldURI = 'calendar:End';
 		$request->ItemChanges->ItemChange->Updates->SetItemField[2]->CalendarItem = new EWSType_CalendarItemType();
-		$request->ItemChanges->ItemChange->Updates->SetItemField[2]->CalendarItem->End = date('c', $post['end']);
+		$request->ItemChanges->ItemChange->Updates->SetItemField[2]->CalendarItem->End = $post['end'];
 		
 		$request->ItemChanges->ItemChange->Updates->SetItemField[3]->FieldURI->FieldURI = 'calendar:Location';
 		$request->ItemChanges->ItemChange->Updates->SetItemField[3]->CalendarItem = new EWSType_CalendarItemType();
 		$request->ItemChanges->ItemChange->Updates->SetItemField[3]->CalendarItem->Location = $post['location'];
+		
+		//$request->ItemChanges->ItemChange->Updates->SetItemField[4]->FieldURI->FieldURI = 'calendar:Importance';
+		//$request->ItemChanges->ItemChange->Updates->SetItemField[4]->CalendarItem = new EWSType_CalendarItemType();
+		//$request->ItemChanges->ItemChange->Updates->SetItemField[4]->CalendarItem->Location = $post['importance'];
 		
 		$response = $this->ews->UpdateItem($request);
 		
@@ -319,7 +328,7 @@ class Ews {
      * @todo Define update process
      */
     public function getForm($tpl, $errors = null, $item = null) {
-		
+		//var_dump($item);
 		// Start from scratch and set current time values
 		$now = time();
 		$current_hour = date('G', $now);
@@ -333,6 +342,18 @@ class Ews {
 		
 		//Check if we need to handle an edit/update process
 		//$item = $this->modx->toArray($item);
+		
+		if(!empty($item->Attachments->FileAttachment)) {
+			// FileAttachment attribute can either be an array or instance of stdClass...
+			$attachments = array();
+			if(is_array($item->Attachments->FileAttachment) === FALSE ) {
+			    $attachments[] = $item->Attachments->FileAttachment;
+			}
+			else {
+			    $attachments = $item->Attachments->FileAttachment;
+			}
+		}
+		
 		if($item) {
 			$data = array(
 				'subject'		=> $item->Subject,
@@ -343,7 +364,8 @@ class Ews {
 				'submit'		=> 'Editieren',
 				'editable'		=> $item->ItemId->Id,
 				'change_key'	=> $item->ItemId->ChangeKey,
-				'cancelable'	=> 1
+				'cancelable'	=> 1,
+				'attachments'	=> $this->getAttachments($attachments)
 			);
 			
 			$start_hour = date('G', strtotime($item->Start));
@@ -407,6 +429,32 @@ class Ews {
 		$this->setError('emails_sent');
         return true;
 	
+	}
+	
+	/**
+	 * getAttachments
+	 * Returns the attachments of an item
+	 *
+	 * @param array $attachments Array of attachments
+	 */
+	public function getAttachments($attachments) {
+		if(!$attachments)
+			return false;
+		
+		foreach($attachments as $attachment) {
+            $request = new EWSType_GetAttachmentType();
+            $request->AttachmentIds->AttachmentId = $attachment->AttachmentId;
+            $response = $this->ews->GetAttachment($request);
+			var_dump($response);
+			
+            // Assuming response was successful ...
+            $attachments = $response->ResponseMessages->GetAttachmentResponseMessage->Attachments;
+            $content = $attachments->FileAttachment->Content;
+			$name = $attachments->FileAttachment->Name;
+			$output .= $this->modx->getChunk('calendarAttachment', array('name' => $name));
+            file_put_contents($this->config['assetsPath'] . 'attachments/' . $attachment->Name, $content);
+        }
+		return $output;
 	}
 	
     /**
@@ -489,11 +537,6 @@ class Ews {
         }
         
         $range = date('t', strtotime("$month/01/$year"));  //Monthly range
-        //$first = '01';              //Start months at 01
-        //if($limit) {
-        //    $range = $limit;        //List range
-        //    $first = date('d');     //Start list with today
-        //}
         
         $calendar = array();
         
@@ -583,10 +626,10 @@ class Ews {
 			$events .= $this->modx->getChunk($props['dayTpl'], $args);
             $k++;
         }
+		
 		$output .= $this->modx->getChunk($props['outerTpl'], array('items' => $events, 'attributes' => $props['outerAttr']));
 		$output .= '</div>';
-        echo $output;
-        return;
+		return $output;
     }
     
     /**
@@ -596,10 +639,12 @@ class Ews {
     public function createItem($props, $items) {
 		
         $output = '';
+		$i = 0;
         foreach($items as $item) {
             
             $body = $this->getItemDetail($item->ItemId->Id);
             $arg = array(
+				'id'			=> date('Y-m-d', strtotime($item->Start)) . '-' . $i,
 				'uid'			=> $item->ItemId->Id,
                 'startTime'     => $item->IsAllDayEvent ? 'ganztags' : date('H:i', strtotime($item->Start)),
                 'endTime'       => $item->IsAllDayEvent ? false : date('H:i', strtotime($item->End)),
@@ -609,10 +654,12 @@ class Ews {
                 'subject'       => $item->Subject,
                 'detail'        => $body->_,
                 'fullday'       => $item->IsAllDayEvent,
+				'importance'	=> $item->Importance == 'High' ? 1 : 0,
                 'eventAttr'     => $props['eventAttr']
                          );
             //ItemTpl
             $output .= $this->modx->getChunk($props['eventTpl'], $arg);
+			$i++;
         }
         return $output;
     }

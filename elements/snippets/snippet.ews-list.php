@@ -26,9 +26,9 @@ $props['headerTpl']	= $modx->getOption('headerTpl', $scriptProperties, 'calendar
 $props['navTpl']	= $modx->getOption('navTpl', $scriptProperties);
 $props['addTpl']    = $modx->getOption('addTpl', $scriptProperties, 'calendarAdd');
 
-$props['outerAttr']	= $modx->getOption('outerAttr', $scriptProperties);
+$props['outerAttr']	= $modx->getOption('outerAttr', $scriptProperties, 'class="days-list"');
 $props['dayAttr']	= $modx->getOption('dayAttr', $scriptProperties);
-$props['dayClass']	= $modx->getOption('dayClass', $scriptProperties);
+$props['dayClass']	= $modx->getOption('dayClass', $scriptProperties, 'day-item');
 $props['eventAttr']	= $modx->getOption('eventAttr', $scriptProperties);
 
 $props['cssResource'] = $modx->getOption('cssResource', $scriptProperties);
@@ -40,4 +40,4 @@ $props['timezone']   = $modx->getOption('timezone', $scriptProperties, date_defa
 if(!$props['year']) $props['year'] = date('Y');
 if(!$props['month']) $props['month'] = date('m');
 
-$ews->getCalendarView($props);
+return $ews->getCalendarView($props);

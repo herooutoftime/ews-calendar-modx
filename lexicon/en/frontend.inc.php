@@ -23,7 +23,16 @@
 $_lang['ews.monday'] = 'Monday';
 
 $_lang['ews.importance'] = 'Importance';
-$_lang['ews.importance.low'] = 'Low';
-$_lang['ews.importance.high'] = 'High';
-$_lang['ews.cancel'] = 'Cancel';
-$_lang['ews.cancelevent'] = 'Cancel Event';
+$_lang['ews.form.importance.low'] = 'Low';
+$_lang['ews.form.importance.high'] = 'High';
+$_lang['ews.form.subject'] = 'Subject';
+$_lang['ews.form.location'] = 'Location';
+$_lang['ews.form.start'] = 'Start';
+$_lang['ews.form.end'] = 'End';
+$_lang['ews.form.allday'] = 'Allday';
+$_lang['ews.form.body'] = 'Details';
+$_lang['ews.form.attachments'] = 'Attachments';
+$_lang['ews.form.attachments.exist'] = 'Existing Attachments';
+$_lang['ews.form.sendto'] = 'Send To';
+$_lang['ews.form.cancel'] = 'Cancel';
+$_lang['ews.form.cancelevent'] = 'Cancel Event';
