@@ -53,7 +53,8 @@ class Ews {
 		$this->modx->lexicon->load('ews:error');
 		$this->modx->lexicon->load('ews:frontend');
         
-		$this->modx->regClientStartupHTMLBlock('<link rel="stylesheet" type="text/css" href="'.$assetsUrl.'/css/web.css"');
+		$this->modx->regClientStartupHTMLBlock('<link rel="stylesheet" type="text/css" href="'.$assetsUrl.'css/web.css"');
+		$this->modx->regClientScript($assetsUrl.'js/web.js');
 		
         $s = $modx->getOption('ews.server');
         $u = $modx->getOption('ews.user');
@@ -160,6 +161,10 @@ class Ews {
 		$get = $data['get'];
 		
 		//https://mail.bundesliga.at/owa/?ae=PreFormAction&a=Open&t=IPM.Appointment&id=RgAAAADztGej1vchS5deumnC6FTQBwAWMjwbjh5WS7zXYTuZYYeKAAAA%2fVueAAAWMjwbjh5WS7zXYTuZYYeKAAABSR24AAAP&clr=-1&pspid=_1338835523518_828275302
+		
+		if($post['delete'] && $post['uid'])
+			if($this->deleteItems(array($post['uid'])))
+				return $this->getForm($tpl, $this->message);
 		
 		// Get an item by its uid for editing...
 		if(isset($get) && !empty($get['uid']))
@@ -327,16 +332,61 @@ class Ews {
 		return true;
 	}
 	
-	public function deleteItems(array $ids){
-	    $request = new EWSType_DeleteItemType();
-	    for($i = 0; $i < count($ids); $i++){
+	/**
+	 * cancelItems
+	 * Cancels events so they are not taking place
+	 *
+	 * @param array $ids Array of IDs which will be marked as cancelled
+	 */
+	public function cancelItems(array $ids) {
+		
+		// Faking successful delete
+		return false;
+		$request = new EWSType_UpdateItemType();
+	    
+		for($i = 0; $i < count($ids); $i++){
 		    $request->ItemIds->ItemId[$i]->Id = $ids[$i];
-	    }	    
-	    $request->DeleteType = EWSType_DisposalType::MOVE_TO_DELETED_ITEMS;
+		}
+		
+		$request->ItemChanges->ItemChange->Updates->SetItemField[0]->FieldURI->FieldURI = 'calendar:IsCancelled';
+		$request->ItemChanges->ItemChange->Updates->SetItemField[0]->CalendarItem = new EWSType_CalendarItemType();
+		$request->ItemChanges->ItemChange->Updates->SetItemField[0]->CalendarItem->IsCancelled = 'true';
+	
+		$response = $this->ews->UpdateItem($request);
+		
+		$responseCode = $response->ResponseMessages->UpdateItemResponseMessage->ResponseCode;
+		$id = $response->ResponseMessages->UpdateItemResponseMessage->Items->CalendarItem->ItemId->Id;
+		$changeKey = $response->ResponseMessages->UpdateItemResponseMessage->Items->CalendarItem->ItemId->ChangeKey;
+		
+		if($responseCode != 'NoError') {
+			$this->setError('error');
+			return false;
+		}
+		$this->setError('success.cancel');
+		return true;
+	}
+	
+	/**
+	 * deleteItems
+	 * Removes items permanent
+	 *
+	 * @param array $ids Array of IDs which items will be removed permanent
+	 */
+	public function deleteItems(array $ids){
+	    
+		$request = new EWSType_DeleteItemType();
+	    
+		for($i = 0; $i < count($ids); $i++){
+		    $request->ItemIds->ItemId[$i]->Id = $ids[$i];
+		}
+	    
+		$request->DeleteType = EWSType_DisposalType::MOVE_TO_DELETED_ITEMS;
 	    $request->SendMeetingCancellations = EWSType_CalendarItemCreateOrDeleteOperationType::SEND_ONLY_TO_ALL;
-	    $request->AffectedTaskOccurrences = EWSType_AffectedTaskOccurrencesType::ALL_OCCURRENCES;
+	    //$request->AffectedTaskOccurrences = EWSType_AffectedTaskOccurrencesType::ALL_OCCURRENCES;
 	    $response = $this->ews->DeleteItem($request);
-
+		
+		$this->setError('success.delete');
+		
 	    return $response;
 	}
 	

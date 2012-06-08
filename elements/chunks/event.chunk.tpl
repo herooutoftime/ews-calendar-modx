@@ -16,6 +16,8 @@
   </div>
   <div class="modal-footer">
     <a href="[[~25? &uid=`[[+uid]]`]]" class="btn btn-primary">EDIT</a>
+    <a href="[[~26? &action=`cancel` &uid=`[[+uid]]`]]" class="ajax btn btn-primary btn-warning">CANCEL</a>
+    <a href="[[~26? &action=`delete` &uid=`[[+uid]]`]]" class="ajax btn btn-primary btn-warning">DELETE</a>
     <a href="#" class="btn" data-dismiss="modal">Close</a>
   </div>
 </div>
