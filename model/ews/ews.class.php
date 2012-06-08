@@ -43,6 +43,7 @@ class Ews {
         $this->config = array_merge(array(
             'corePath'      => $corePath,
 			'assetsPath'	=> $assetsPath,
+			'assetsUrl'		=> $assetsUrl,
             'chunksPath'    => $corePath.'elements/chunks/',
             'snippetsPath'  => $corePath.'elements/snippets/',
             'includesPath'  => $corePath.'includes/'
@@ -125,8 +126,19 @@ class Ews {
 		$this->message[]['text'] = $this->modx->lexicon('ews.error.' . $error);
 		
 		// Take the red pill or the green? Check for success messages
-		if($error == 'success')
+		if(preg_match('/success/', $error) > 0)
 			$this->message[]['type'] = true;
+	}
+	
+	/**
+	 * getAction
+	 * Function to decide which action will take place based on given parameters
+	 *
+	 * @param string $tpl Form chunk for rendering HTML form
+	 * @param array $data $_POST, $_GET, $_FILES & scriptProperties
+	 */
+	public function getAction($tpl, $data) {
+		
 	}
 	
 	/**
@@ -173,10 +185,10 @@ class Ews {
 			return $this->getForm($tpl, $this->message);
 		
 		// Check for edit/update process
-		if($post['edit'] && $post['uid'] && $post['change_key'])
+		if($post['uid'] && $post['change_key'])
 			if($this->editItem($post))
 				return $this->getForm($tpl, $this->message);
-        
+		
 		// Start the creation process
 		$request = new EWSType_CreateItemType();
 		$request->Items = new EWSType_NonEmptyArrayOfAllItemsType();
@@ -261,9 +273,33 @@ class Ews {
 		
 		$request->ItemChanges->ItemChange->Updates->SetItemField = array();
 		
+		if($post['cancel']) {
+			$request->ItemChanges->ItemChange->Updates->SetItemField[0]->FieldURI->FieldURI = 'calendar:IsCancelled';
+			$request->ItemChanges->ItemChange->Updates->SetItemField[0]->CalendarItem = new EWSType_CalendarItemType();
+			$request->ItemChanges->ItemChange->Updates->SetItemField[0]->CalendarItem->IsCancelled = 'true';
+		
+			$response = $this->ews->UpdateItem($request);
+			var_dump($response);
+			die();
+			$responseCode = $response->ResponseMessages->UpdateItemResponseMessage->ResponseCode;
+			$id = $response->ResponseMessages->UpdateItemResponseMessage->Items->CalendarItem->ItemId->Id;
+			$changeKey = $response->ResponseMessages->UpdateItemResponseMessage->Items->CalendarItem->ItemId->ChangeKey;
+			
+			if($responseCode != 'NoError') {
+				$this->setError('error');
+				return false;
+			}
+			$this->setError('success.cancel');
+			return true;
+		}
+		
 		$request->ItemChanges->ItemChange->Updates->SetItemField[0]->FieldURI->FieldURI = 'item:Subject';
 		$request->ItemChanges->ItemChange->Updates->SetItemField[0]->CalendarItem = new EWSType_CalendarItemType();
 		$request->ItemChanges->ItemChange->Updates->SetItemField[0]->CalendarItem->Subject = $post['subject'];
+		
+		$request->ItemChanges->ItemChange->Updates->SetItemField[4]->FieldURI->FieldURI = 'item:Importance';
+		$request->ItemChanges->ItemChange->Updates->SetItemField[4]->CalendarItem = new EWSType_CalendarItemType();
+		$request->ItemChanges->ItemChange->Updates->SetItemField[4]->CalendarItem->Importance = $post['importance'];
 		
 		$request->ItemChanges->ItemChange->Updates->SetItemField[1]->FieldURI->FieldURI = 'calendar:Start';
 		$request->ItemChanges->ItemChange->Updates->SetItemField[1]->CalendarItem = new EWSType_CalendarItemType();
@@ -277,10 +313,6 @@ class Ews {
 		$request->ItemChanges->ItemChange->Updates->SetItemField[3]->CalendarItem = new EWSType_CalendarItemType();
 		$request->ItemChanges->ItemChange->Updates->SetItemField[3]->CalendarItem->Location = $post['location'];
 		
-		//$request->ItemChanges->ItemChange->Updates->SetItemField[4]->FieldURI->FieldURI = 'calendar:Importance';
-		//$request->ItemChanges->ItemChange->Updates->SetItemField[4]->CalendarItem = new EWSType_CalendarItemType();
-		//$request->ItemChanges->ItemChange->Updates->SetItemField[4]->CalendarItem->Location = $post['importance'];
-		
 		$response = $this->ews->UpdateItem($request);
 		
 		$responseCode = $response->ResponseMessages->UpdateItemResponseMessage->ResponseCode;
@@ -288,9 +320,24 @@ class Ews {
 		$changeKey = $response->ResponseMessages->UpdateItemResponseMessage->Items->CalendarItem->ItemId->ChangeKey;
 		
 		if($responseCode != 'NoError') {
-			$this->setError('success');
-			return true;
+			$this->setError('error');
+			return false;
 		}
+		$this->setError('success.edit');
+		return true;
+	}
+	
+	public function deleteItems(array $ids){
+	    $request = new EWSType_DeleteItemType();
+	    for($i = 0; $i < count($ids); $i++){
+		    $request->ItemIds->ItemId[$i]->Id = $ids[$i];
+	    }	    
+	    $request->DeleteType = EWSType_DisposalType::MOVE_TO_DELETED_ITEMS;
+	    $request->SendMeetingCancellations = EWSType_CalendarItemCreateOrDeleteOperationType::SEND_ONLY_TO_ALL;
+	    $request->AffectedTaskOccurrences = EWSType_AffectedTaskOccurrencesType::ALL_OCCURRENCES;
+	    $response = $this->ews->DeleteItem($request);
+
+	    return $response;
 	}
 	
 	public function getItem($uid) {
@@ -365,6 +412,7 @@ class Ews {
 				'editable'		=> $item->ItemId->Id,
 				'change_key'	=> $item->ItemId->ChangeKey,
 				'cancelable'	=> 1,
+				'deleteable'	=> 1,
 				'attachments'	=> $this->getAttachments($attachments)
 			);
 			
@@ -397,8 +445,9 @@ class Ews {
 				$type = true;
 			$message .= $error['text'] . '<br/>';
 		}
-		//return $this->modx->getChunk($tpl, array('hours' => $hours, 'minutes' => $minutes, 'errors' => $message, 'type' => $type));
-		return $this->modx->getChunk($tpl, array_merge($data, array('hours' => $hours, 'minutes' => $minutes, 'errors' => $message, 'type' => $type)));
+		if(!$data)
+			return $this->modx->getChunk($tpl, array('hours' => $hours, 'minutes' => $minutes, 'errors' => $message, 'type' => $type));
+		return $this->modx->getChunk($tpl, array_merge(array('hours' => $hours, 'minutes' => $minutes, 'errors' => $message, 'type' => $type), $data));
     }
 	
 	/**
@@ -445,14 +494,17 @@ class Ews {
             $request = new EWSType_GetAttachmentType();
             $request->AttachmentIds->AttachmentId = $attachment->AttachmentId;
             $response = $this->ews->GetAttachment($request);
-			var_dump($response);
+			//var_dump($response);
 			
             // Assuming response was successful ...
             $attachments = $response->ResponseMessages->GetAttachmentResponseMessage->Attachments;
             $content = $attachments->FileAttachment->Content;
 			$name = $attachments->FileAttachment->Name;
-			$output .= $this->modx->getChunk('calendarAttachment', array('name' => $name));
-            file_put_contents($this->config['assetsPath'] . 'attachments/' . $attachment->Name, $content);
+			
+            if(file_put_contents($this->config['assetsPath'] . 'attachments/' . $attachment->Name, $content))
+				$src =  $this->config['assetsUrl'] . 'attachments/' . $attachment->Name;
+			
+			$output .= $this->modx->getChunk('calendarAttachment', array('name' => $name, 'src' => $src));
         }
 		return $output;
 	}

@@ -19,8 +19,11 @@
  *
  * @package ews
  */
-
+//$_lang['ews.error.'] = '';
+$_lang['ews.error.error'] = 'Something went wrong';
 $_lang['ews.error.success'] = 'Event was successfully added!';
+$_lang['ews.error.success.edit'] = 'Event was succesfully updated!';
+$_lang['ews.error.success.cancel'] = 'Event was succesfully cancelled!';
 $_lang['ews.error.nosubject'] = 'Subject can\'t be empty';
 $_lang['ews.error.nodate'] = 'Input is no valid date';
 $_lang['ews.error.attachments_added'] = 'Attachments were added';

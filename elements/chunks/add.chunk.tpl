@@ -25,11 +25,12 @@
   <label for="body">[[%ews.form.body]]</label>
   <textarea id="body" name="body" cols="200" rows="5">[[+body:default=``]]</textarea><br/>
   <label for="file">[[%ews.form.attachments.exist]]</label>
-  <ul>[[+attachments]]</ul>
+  <ul class="thumbnails">[[+attachments]]</ul>
   <label for="file">[[%ews.form.attachments]]</label>
   <input id="file" type="file" name="file" /><br/>
   <label for="email">[[%ews.form.sendto]]</label>
   <input id="email" type="email" name="email" value="[[+email:default=``]]"/><br/>
   <input class="btn btn-success" type="submit" name="edit" value="[[+submit:default=`Erstellen`]]" />
-  [[+cancelable:notempty=`<input class="btn btn-warning" type="submit" name="cancel" value="[[%ews.form.cancelevent]]" />`:default=``]]
+  [[+cancelable:notempty=`<input class="btn btn-warning" type="submit" name="cancel" value="[[%ews.form.event.cancel]]" />`:default=``]]
+  [[+deleteable:notempty=`<input class="btn btn-danger" type="submit" name="delete" value="[[%ews.form.event.delete]]" />`:default=``]]
 </form>

@@ -35,4 +35,5 @@ $_lang['ews.form.attachments'] = 'Attachments';
 $_lang['ews.form.attachments.exist'] = 'Existing Attachments';
 $_lang['ews.form.sendto'] = 'Send To';
 $_lang['ews.form.cancel'] = 'Cancel';
-$_lang['ews.form.cancelevent'] = 'Cancel Event';
+$_lang['ews.form.event.cancel'] = 'Cancel Event';
+$_lang['ews.form.event.delete'] = 'Delete Event';
